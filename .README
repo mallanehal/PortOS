@@ -1,0 +1,23 @@
+# Intelligent Port Resource & Traffic Management System
+
+An advanced full-stack application engineered to streamline and optimize port operations. This system integrates core **Operating System (OS)** process scheduling and multithreaded resource allocation with **Database Management System (DBMS)** transactions, wrapped inside a modern **React and Tailwind CSS** user interface.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React, Vite, Tailwind CSS
+- **Backend & OS Logic:** C++ (Process scheduling, multithreading, resource management algorithms)
+- **Database:** MySQL / Relational Database schemas for port transactions
+- **Tools:** Git, GitHub, VS Code, Cisco Packet Tracer (Network topology)
+
+---
+
+## 📁 Repository Structure
+
+```text
+OS_DBMS_Project/
+├── Backend/
+│   ├── database/    # DBMS schema scripts, tables, and transactional queries
+│   └── OS_Logic/    # C++ implementations for OS resource allocation & scheduling
+└── Frontend/        # React + Vite + Tailwind CSS dashboard UI for port operations
