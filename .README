@@ -9,7 +9,7 @@ An advanced full-stack application engineered to streamline and optimize port op
 - **Frontend:** React, Vite, Tailwind CSS
 - **Backend & OS Logic:** C++ (Process scheduling, multithreading, resource management algorithms)
 - **Database:** MySQL / Relational Database schemas for port transactions
-- **Tools:** Git, GitHub, VS Code, Cisco Packet Tracer (Network topology)
+- **Tools:** Git, GitHub, VS Code
 
 ---
 
