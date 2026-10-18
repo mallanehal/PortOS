@@ -1,23 +1,45 @@
-# Intelligent Port Resource & Traffic Management System
+# Intelligent Port Resource and Traffic Management System
 
-An advanced full-stack application engineered to streamline and optimize port operations. This system integrates core **Operating System (OS)** process scheduling and multithreaded resource allocation with **Database Management System (DBMS)** transactions, wrapped inside a modern **React and Tailwind CSS** user interface.
+## About the Project
 
----
+The Intelligent Port Resource and Traffic Management System is a project designed to manage port operations more efficiently. It focuses on scheduling ships, allocating port resources, and managing the use of berths, cranes, and trucks.
 
-## 🛠️ Tech Stack
+The project combines Operating System (OS) concepts and Database Management System (DBMS) concepts with a web-based interface.
+
+## Features
+
+- **Ship Scheduling:** Schedules ship requests based on priority, arrival time, and waiting time.
+- **Resource Management:** Tracks the availability and usage of berths, cranes, and trucks.
+- **Priority Scheduling:** Gives higher-priority ships preference while using aging to reduce long waiting times.
+- **Database Management:** Aims to store and manage port-related information using a database.
+- **Web Interface:** Provides a user interface for interacting with port management features.
+
+## Technologies Used
 
 - **Frontend:** React, Vite, Tailwind CSS
-- **Backend & OS Logic:** C++ (Process scheduling, multithreading, resource management algorithms)
-- **Database:** MySQL / Relational Database schemas for port transactions
+- **OS Logic:** C++
+- **Database:** MySQL
 - **Tools:** Git, GitHub, VS Code
 
----
-
-## 📁 Repository Structure
+## Project Structure
 
 ```text
-OS_DBMS_Project/
+PortOS/
 ├── Backend/
-│   ├── database/    # DBMS schema scripts, tables, and transactional queries
-│   └── OS_Logic/    # C++ implementations for OS resource allocation & scheduling
-└── Frontend/        # React + Vite + Tailwind CSS dashboard UI for port operations
+│   ├── OS_Logic/
+│   │   └── main.cpp
+│   └── database/
+└── Frontend/
+```
+
+## Project Objective
+
+The main objective is to apply OS and DBMS concepts to a practical port management problem. The system aims to improve resource utilization, organize ship scheduling, and provide a clear way to monitor port operations.
+
+## Current Status
+
+The C++ module includes ship scheduling, priority-based processing, resource allocation, and resource status tracking. Database connectivity and frontend features are being developed as part of the overall project.
+
+## Contributors
+
+This project is developed as part of an academic project.
