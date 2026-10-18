@@ -1,15 +1,15 @@
 /* Remaining topics  :
 1. Banker's Algorithm
 2. File handling
+*/
 
-  */
 #include <iostream>
 #include <vector>
 #include <string>
 #include <iomanip>
 using namespace std;
 
-/* ---------------- classes ---------------- */
+//classes
 class Ship
 {
 public:
@@ -66,7 +66,7 @@ public:
     int status;
 };
 
-/* ---------------- Process (one ship request) ----------------
+/* Process (one ship request)
 Resources are numbered:  0 = berth, 1 = crane, 2 = truck
  needed[r] = how many units of that resource the ship needs       */
 const int NOT_ARRIVED = 0;
@@ -94,7 +94,7 @@ public:
     vector<int> allocatedTrucks;
 };
 
-/* ---------------- global data ----------- */
+/*global data */
 int total[3] = {3, 2, 3}; // port has 3 berths, 2 cranes, 3 trucks
 int available[3];         // free right now
 string resName[3] = {"BERTH", "CRANE", "TRUCK"};
@@ -224,7 +224,7 @@ void updateResourceTime(vector<Resource> &resources)
             resource.timeleft--;
 }
 
-/* ---------------- hardcoded data ---------------- */
+//hardcoded data
 void addShip(int id, string name, string type, string country, string captain)
 {
     Ship s;
@@ -277,7 +277,7 @@ vector<Process> readfromfile()
     return q;
 }
 
-/* -------- small helper functions ---------- */
+//small helper functions
 string shipName(int id)
 {
     int n = ships.size();
@@ -310,7 +310,7 @@ bool canStart(Process &p)
     return true;
 }
 
-/* ---------------- SCHEDULING parT ---------------- */
+//SCHEDULING parT
 
 // true if a should be served before b
 // 1st rule: smaller priority number first (priority scheduling, with aging)
@@ -495,7 +495,7 @@ void simulate(vector<Process> ps)
     printResults(ps, t);
 }
 
-/* ---------------- main ---------------- */
+//main
 int main()
 {
     
