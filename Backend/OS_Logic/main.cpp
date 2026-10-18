@@ -1,15 +1,15 @@
 /* Remaining topics  :
-Mistake :  give id to berth , Truck and Crane
-1. Banker's Algorithm 
+1. Banker's Algorithm
 2. File handling
 
   */
 #include <iostream>
 #include <vector>
 #include <string>
+#include <iomanip>
 using namespace std;
 
-/* ---------------- your original classes ---------------- */
+/* ---------------- classes ---------------- */
 class Ship
 {
 public:
@@ -23,12 +23,14 @@ public:
 class Berth
 {
 public:
+    int id;
     enum class size
     {
         Medium,
         Small,
         Large
     };
+    size resourceSize;
     int duration;
     int timeleft;
     int status;
@@ -37,11 +39,13 @@ public:
 class Truck
 {
 public:
+    int id;
     enum class size
     {
         Large,
         small
     };
+    size resourceSize;
     int duration;
     int timeleft;
     int status;
@@ -50,19 +54,21 @@ public:
 class Crane
 {
 public:
+    int id;
     enum class size
     {
         Large,
         small
     };
+    size resourceSize;
     int duration;
     int timeleft;
     int status;
 };
 
 /* ---------------- Process (one ship request) ----------------
-   Resources are numbered:  0 = berth, 1 = crane, 2 = truck
-   needed[r] = how many units of that resource the ship needs       */
+Resources are numbered:  0 = berth, 1 = crane, 2 = truck
+ needed[r] = how many units of that resource the ship needs       */
 const int NOT_ARRIVED = 0;
 const int WAITING = 1;
 const int RUNNING = 2;
@@ -83,6 +89,9 @@ public:
     int waited; // seconds waited (used for aging)
     int start;
     int finish;
+    vector<int> allocatedBerths;
+    vector<int> allocatedCranes;
+    vector<int> allocatedTrucks;
 };
 
 /* ---------------- global data ----------- */
@@ -90,6 +99,130 @@ int total[3] = {3, 2, 3}; // port has 3 berths, 2 cranes, 3 trucks
 int available[3];         // free right now
 string resName[3] = {"BERTH", "CRANE", "TRUCK"};
 vector<Ship> ships;
+
+// Individual hardcoded resources. status: 0 = FREE, 1 = IN USE
+const int FREE = 0;
+const int IN_USE = 1;
+vector<Berth> berths;
+vector<Crane> cranes;
+vector<Truck> trucks;
+
+void initializeResources()
+{
+    berths = {
+        {101, Berth::size::Large, 0, 0, FREE},
+        {102, Berth::size::Medium, 0, 0, FREE},
+        {103, Berth::size::Small, 0, 0, FREE}};
+    cranes = {
+        {201, Crane::size::Large, 0, 0, FREE},
+        {202, Crane::size::small, 0, 0, FREE}};
+    trucks = {
+        {301, Truck::size::Large, 0, 0, FREE},
+        {302, Truck::size::small, 0, 0, FREE},
+        {303, Truck::size::small, 0, 0, FREE}};
+}
+
+string resourceStatus(int status)
+{
+    return status == FREE ? "FREE" : "IN USE";
+}
+string berthSizeName(Berth::size value)
+{
+    if (value == Berth::size::Medium)
+        return "Medium";
+    if (value == Berth::size::Small)
+        return "Small";
+    if (value == Berth::size::Large)
+        return "Large";
+
+    return "Unknown";
+}
+
+string truckSizeName(Truck::size value)
+{
+    if (value == Truck::size::Large)
+        return "Large";
+    if (value == Truck::size::small)
+        return "Small";
+
+    return "Unknown";
+}
+
+string craneSizeName(Crane::size value)
+{
+    if (value == Crane::size::Large)
+        return "Large";
+    if (value == Crane::size::small)
+        return "Small";
+
+    return "Unknown";
+}
+
+void printResources()
+{
+    cout << "\n--- INDIVIDUAL RESOURCE STATUS ---\n";
+
+    cout << "\nBERTHS\n";
+    cout << "ID\tSize\tDuration\tTimeleft\tStatus\n";
+
+    for (const auto &b : berths)
+        cout << b.id << "\t" << berthSizeName(b.resourceSize) << "\t" << b.duration << "\t\t" << b.timeleft << "\t\t" << resourceStatus(b.status) << "\n";
+    cout << "\nCRANES\n";
+    cout << "ID\tSize\tDuration\tTimeleft\tStatus\n";
+
+    for (const auto &c : cranes)
+        cout << c.id << "\t" << craneSizeName(c.resourceSize) << "\t" << c.duration << "\t\t" << c.timeleft << "\t\t" << resourceStatus(c.status) << "\n";
+
+    cout << "\nTRUCKS\n";
+    cout << "ID\tSize\tDuration\tTimeleft\tStatus\n";
+
+    for (const auto &tr : trucks)
+        cout << tr.id << "\t" << truckSizeName(tr.resourceSize) << "\t" << tr.duration << "\t\t" << tr.timeleft << "\t\t" << resourceStatus(tr.status) << "\n";
+
+    cout << "\nFree counts: Berths=" << available[0] << ", Cranes=" << available[1] << ", Trucks=" << available[2] << "\n";
+}
+
+template <typename Resource>
+void allocateResources(vector<Resource> &resources, int amount, int burst, vector<int> &allocatedIds)
+{
+    for (auto &resource : resources)
+    {
+        if (amount == 0)
+            break;
+        if (resource.status == FREE)
+        {
+            resource.status = IN_USE;
+            resource.duration = burst;
+            resource.timeleft = burst;
+            allocatedIds.push_back(resource.id);
+            amount--;
+        }
+    }
+}
+
+template <typename Resource>
+void releaseResources(vector<Resource> &resources, const vector<int> &allocatedIds)
+{
+    for (auto &resource : resources)
+    {
+        for (int id : allocatedIds)
+        {
+            if (resource.id == id)
+            {
+                resource.status = FREE;
+                resource.timeleft = 0;
+            }
+        }
+    }
+}
+
+template <typename Resource>
+void updateResourceTime(vector<Resource> &resources)
+{
+    for (auto &resource : resources)
+        if (resource.status == IN_USE && resource.timeleft > 0)
+            resource.timeleft--;
+}
 
 /* ---------------- hardcoded data ---------------- */
 void addShip(int id, string name, string type, string country, string captain)
@@ -120,6 +253,9 @@ Process makeProcess(int pid, int ship, int prio, int arr, int burst, int b, int 
     p.waited = 0;
     p.start = -1;
     p.finish = -1;
+    p.allocatedBerths.clear();
+    p.allocatedCranes.clear();
+    p.allocatedTrucks.clear();
     return p;
 }
 
@@ -174,7 +310,7 @@ bool canStart(Process &p)
     return true;
 }
 
-/* ---------------- SCHEDULING ---------------- */
+/* ---------------- SCHEDULING parT ---------------- */
 
 // true if a should be served before b
 // 1st rule: smaller priority number first (priority scheduling, with aging)
@@ -215,10 +351,10 @@ void printResults(vector<Process> &ps, int t)
         int wait = tat - ps[i].burst;           // time spent waiting
         sumTat = sumTat + tat;
         sumWait = sumWait + wait;
-        cout << "P" << ps[i].pid << "\t" << shipName(ps[i].ship_id) << "\t"<< ps[i].arrival << "\t" << ps[i].burst << "\t" << ps[i].start<< "\t"<< ps[i].finish << "\t" << tat << "\t" << wait << "\n";
+        cout << "P" << ps[i].pid << "\t" << shipName(ps[i].ship_id) << "\t" << ps[i].arrival << "\t" << ps[i].burst << "\t" << ps[i].start << "\t" << ps[i].finish << "\t" << tat << "\t" << wait << "\n";
     }
 
-    cout << "Average turnaround = " << sumTat / n << "   Average wait = "<< sumWait / n<< "   Finished at t = " << t << "\n";
+    cout << "Average turnaround = " << sumTat / n << "   Average wait = " << sumWait / n << "   Finished at t = " << t << "\n";
 }
 
 // Priority scheduling + FCFS (for equal priority) + aging
@@ -227,6 +363,8 @@ void simulate(vector<Process> ps)
     int agingTime = 2; // every 2 seconds of waiting, priority improves
     for (int r = 0; r < 3; r++)
         available[r] = total[r];
+    initializeResources();
+    printResources();
 
     int n = ps.size();
     int t = 0;
@@ -281,12 +419,15 @@ void simulate(vector<Process> ps)
             {
                 for (int r = 0; r < 3; r++)
                     available[r] = available[r] - ps[i].needed[r];
+                allocateResources(berths, ps[i].needed[0], ps[i].burst, ps[i].allocatedBerths);
+                allocateResources(cranes, ps[i].needed[1], ps[i].burst, ps[i].allocatedCranes);
+                allocateResources(trucks, ps[i].needed[2], ps[i].burst, ps[i].allocatedTrucks);
                 ps[i].state = RUNNING;
                 ps[i].start = t;
                 ps[i].timeleft = ps[i].burst;
                 cout << "  START : ";
                 printName(ps[i]);
-                cout << " gets B=" << ps[i].needed[0] << " C=" << ps[i].needed[1]<< " T=" << ps[i].needed[2] << ", works for " <<ps[i].burst << "s\n";
+                cout << " gets B=" << ps[i].needed[0] << " C=" << ps[i].needed[1] << " T=" << ps[i].needed[2] << ", works for " << ps[i].burst << "s\n";
             }
             else
             {
@@ -305,6 +446,7 @@ void simulate(vector<Process> ps)
             }
         }
 
+        printResources();
         // 4. running ships work for one second
         for (int i = 0; i < n; i++)
         {
@@ -317,12 +459,19 @@ void simulate(vector<Process> ps)
                     ps[i].finish = t + 1;
                     for (int r = 0; r < 3; r++)
                         available[r] = available[r] + ps[i].needed[r];
+                    releaseResources(berths, ps[i].allocatedBerths);
+                    releaseResources(cranes, ps[i].allocatedCranes);
+                    releaseResources(trucks, ps[i].allocatedTrucks);
                     cout << "  DONE  : ";
                     printName(ps[i]);
                     cout << " finished at t=" << ps[i].finish << ", resources given back\n";
                 }
             }
         }
+        // Update remaining time for each resource currently in use.
+        updateResourceTime(berths);
+        updateResourceTime(cranes);
+        updateResourceTime(trucks);
 
         // 5. aging: the longer a ship waits, the more important it becomes
         for (int i = 0; i < n; i++)
@@ -334,7 +483,7 @@ void simulate(vector<Process> ps)
                 {
                     cout << "  AGING : ";
                     printName(ps[i]);
-                    cout << " waited " << ps[i].waited << "s, priority "<< ps[i].effectivePriority << " -> " << ps[i].effectivePriority - 1 << "\n";
+                    cout << " waited " << ps[i].waited << "s, priority " << ps[i].effectivePriority << " -> " << ps[i].effectivePriority - 1 << "\n";
                     ps[i].effectivePriority--;
                 }
             }
@@ -342,15 +491,14 @@ void simulate(vector<Process> ps)
 
         t++;
     }
-
+    printResources();
     printResults(ps, t);
 }
 
 /* ---------------- main ---------------- */
 int main()
 {
-    cout << fixed;
-    cout.precision(2); // show numbers like 8.67
+    
 
     vector<Process> Port_Queue;
     Port_Queue = readfromfile();
@@ -377,4 +525,5 @@ int main()
 
     simulate(Port_Queue);
     return 0;
+
 }
