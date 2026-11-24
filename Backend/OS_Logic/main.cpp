@@ -1,15 +1,17 @@
-/* Remaining topics  :
-1. Banker's Algorithm
-2. File handling
-*/
+/*
+ */
 
 #include <iostream>
 #include <vector>
 #include <string>
 #include <iomanip>
+#include <fstream>
+#include <sstream>
+#include <cmath>
+
 using namespace std;
 
-//classes
+// classes
 class Ship
 {
 public:
@@ -84,7 +86,10 @@ public:
     int arrival;
     int burst; // how many seconds the ship stays and works
     int timeleft;
-    int needed[3];
+    int maximum[3];
+    int allocation[3];
+    int need[3];
+    int needed[3]; // Legacy single request, kept for scheduling compatibility
     int state;
     int waited; // seconds waited (used for aging)
     int start;
@@ -109,17 +114,24 @@ vector<Truck> trucks;
 
 void initializeResources()
 {
-    berths = {
-        {101, Berth::size::Large, 0, 0, FREE},
-        {102, Berth::size::Medium, 0, 0, FREE},
-        {103, Berth::size::Small, 0, 0, FREE}};
-    cranes = {
-        {201, Crane::size::Large, 0, 0, FREE},
-        {202, Crane::size::small, 0, 0, FREE}};
-    trucks = {
-        {301, Truck::size::Large, 0, 0, FREE},
-        {302, Truck::size::small, 0, 0, FREE},
-        {303, Truck::size::small, 0, 0, FREE}};
+    for (auto &berth : berths)
+    {
+        berth.duration = 0;
+        berth.timeleft = 0;
+        berth.status = FREE;
+    }
+    for (auto &crane : cranes)
+    {
+        crane.duration = 0;
+        crane.timeleft = 0;
+        crane.status = FREE;
+    }
+    for (auto &truck : trucks)
+    {
+        truck.duration = 0;
+        truck.timeleft = 0;
+        truck.status = FREE;
+    }
 }
 
 string resourceStatus(int status)
@@ -224,7 +236,7 @@ void updateResourceTime(vector<Resource> &resources)
             resource.timeleft--;
 }
 
-//hardcoded data
+// File-loaded data
 void addShip(int id, string name, string type, string country, string captain)
 {
     Ship s;
@@ -249,6 +261,15 @@ Process makeProcess(int pid, int ship, int prio, int arr, int burst, int b, int 
     p.needed[0] = b;
     p.needed[1] = c;
     p.needed[2] = t;
+    p.maximum[0] = b;
+    p.maximum[1] = c;
+    p.maximum[2] = t;
+    p.allocation[0] = 0;
+    p.allocation[1] = 0;
+    p.allocation[2] = 0;
+    p.need[0] = b;
+    p.need[1] = c;
+    p.need[2] = t;
     p.state = NOT_ARRIVED;
     p.waited = 0;
     p.start = -1;
@@ -262,22 +283,109 @@ Process makeProcess(int pid, int ship, int prio, int arr, int burst, int b, int 
 vector<Process> readfromfile()
 {
     vector<Process> q;
-    addShip(1, "MV Aurora", "Cargo", "Norway", "Erik Hansen");
-    addShip(2, "Ever Dawn", "Container", "Taiwan", "Li Wei");
-    addShip(3, "Blue Marlin", "Tanker", "Panama", "R. Diaz");
-    addShip(4, "Sea Queen", "Passenger", "Italy", "M. Rossi");
+    ships.clear();
+    berths.clear();
+    cranes.clear();
+    trucks.clear();
+    total[0] = total[1] = total[2] = 0;
 
-    // format :  pid ship prio arr burst  B  C  T
-    q.push_back(makeProcess(1, 1, 2, 1, 4, 1, 1, 0));
-    q.push_back(makeProcess(2, 2, 2, 0, 4, 2, 1, 3));
-    q.push_back(makeProcess(3, 3, 3, 4, 3, 2, 0, 0));
-    q.push_back(makeProcess(4, 4, 5, 0, 2, 1, 0, 3));
-    q.push_back(makeProcess(5, 1, 1, 1, 3, 1, 1, 3));
-    q.push_back(makeProcess(6, 2, 1, 1, 2, 1, 2, 2));
+    ifstream input("input.txt");
+    if (!input.is_open())
+    {
+        cout << "ERROR: input.txt not found. Place it beside main.cpp or a.exe.\n";
+        return q;
+    }
+
+    string line;
+    while (getline(input, line))
+    {
+        if (line.empty() || line[0] == '#')
+            continue;
+
+        stringstream row(line);
+        string keyword;
+        row >> keyword;
+
+        if (keyword == "BERTHS")
+        {
+            row >> total[0];
+        }
+        else if (keyword == "CRANES")
+        {
+            row >> total[1];
+        }
+        else if (keyword == "TRUCKS")
+        {
+            row >> total[2];
+        }
+        else if (keyword == "SHIP")
+        {
+            string pipeData;
+            getline(row, pipeData);
+            if (!pipeData.empty() && pipeData[0] == ' ')
+                pipeData.erase(0, 1);
+
+            stringstream fields(pipeData);
+            string idText, name, type, country, captain;
+            getline(fields, idText, '|');
+            getline(fields, name, '|');
+            getline(fields, type, '|');
+            getline(fields, country, '|');
+            getline(fields, captain, '|');
+            addShip(stoi(idText), name, type, country, captain);
+        }
+        else if (keyword == "BERTH")
+        {
+            int id;
+            string size;
+            row >> id >> size;
+            Berth::size parsedSize = Berth::size::Small;
+            if (size == "Large" || size == "large")
+                parsedSize = Berth::size::Large;
+            else if (size == "Medium" || size == "medium")
+                parsedSize = Berth::size::Medium;
+            berths.push_back({id, parsedSize, 0, 0, FREE});
+        }
+        else if (keyword == "CRANE")
+        {
+            int id;
+            string size;
+            row >> id >> size;
+            Crane::size parsedSize = (size == "Large" || size == "large") ? Crane::size::Large : Crane::size::small;
+            cranes.push_back({id, parsedSize, 0, 0, FREE});
+        }
+        else if (keyword == "TRUCK")
+        {
+            int id;
+            string size;
+            row >> id >> size;
+            Truck::size parsedSize = (size == "Large" || size == "large") ? Truck::size::Large : Truck::size::small;
+            trucks.push_back({id, parsedSize, 0, 0, FREE});
+        }
+        else if (keyword == "PROCESS")
+        {
+            int pid, ship, priority, arrival, burst, b, c, t;
+            if (row >> pid >> ship >> priority >> arrival >> burst >> b >> c >> t)
+                q.push_back(makeProcess(pid, ship, priority, arrival, burst, b, c, t));
+        }
+    }
+
+    if (berths.size() > 0)
+        total[0] = berths.size();
+    if (cranes.size() > 0)
+        total[1] = cranes.size();
+    if (trucks.size() > 0)
+        total[2] = trucks.size();
+
+    if (q.empty())
+        cout << "ERROR: input.txt contains no PROCESS rows.\n";
+    if (ships.empty())
+        cout << "ERROR: input.txt contains no SHIP rows.\n";
+
     return q;
 }
 
-//small helper functions
+// small helper functions
 string shipName(int id)
 {
     int n = ships.size();
@@ -299,18 +407,124 @@ void printAvailable()
     cout << "B=" << available[0] << " C=" << available[1] << " T=" << available[2];
 }
 
-// true if everything the ship needs is free right now
-bool canStart(Process &p)
+void printBankerTables(const vector<Process> &processes, const int work[3])
 {
-    for (int r = 0; r < 3; r++)
+    cout << "\n--- BANKER'S TABLE: MAXIMUM / ALLOCATION / NEED ---\n";
+    cout << left << setw(8) << "Process"
+         << setw(10) << "Maximum"
+         << setw(14) << "Allocation"
+         << setw(12) << "Need"
+         << "\n";
+
+    for (const Process &p : processes)
     {
-        if (p.needed[r] > available[r])
-            return false;
+        cout << left << setw(8) << ("P" + to_string(p.pid));
+        cout << setw(10) << (to_string(p.maximum[0]) + "/" + to_string(p.maximum[1]) + "/" + to_string(p.maximum[2]));
+        cout << setw(14) << (to_string(p.allocation[0]) + "/" + to_string(p.allocation[1]) + "/" + to_string(p.allocation[2]));
+        cout << setw(12) << (to_string(p.need[0]) + "/" + to_string(p.need[1]) + "/" + to_string(p.need[2])) << "\n";
     }
+
+    cout << "Available after current allocations: "
+         << work[0] << "/" << work[1] << "/" << work[2]
+         << "  (Berth/Crane/Truck)\n";
+}
+
+bool isSafeState(vector<Process> &processes, vector<int> &safeSequence)
+{
+    int work[3] = {available[0], available[1], available[2]};
+    vector<bool> finish(processes.size(), false);
+    safeSequence.clear();
+
+    for (int i = 0; i < (int)processes.size(); i++)
+    {
+        if (processes[i].state == NOT_ARRIVED || processes[i].state == DONE)
+            finish[i] = true;
+    }
+
+    for (int step = 0; step < (int)processes.size(); step++)
+    {
+        bool found = false;
+
+        for (int i = 0; i < (int)processes.size(); i++)
+        {
+            if (finish[i])
+                continue;
+
+            bool canFinish = true;
+            for (int r = 0; r < 3; r++)
+            {
+                if (processes[i].need[r] > work[r])
+                {
+                    canFinish = false;
+                    break;
+                }
+            }
+
+            if (canFinish)
+            {
+                for (int r = 0; r < 3; r++)
+                    work[r] += processes[i].allocation[r];
+                finish[i] = true;
+                safeSequence.push_back(processes[i].pid);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            for (int i = 0; i < (int)processes.size(); i++)
+            {
+                if (!finish[i])
+                    return false;
+            }
+            return true;
+        }
+    }
+
     return true;
 }
 
-//SCHEDULING parT
+bool requestResources(Process &ship, int request[3])
+{
+    for (int r = 0; r < 3; r++)
+    {
+        if (request[r] > ship.need[r])
+        {
+            cout << "  BANKER: Request exceeds P" << ship.pid << " remaining NEED\n";
+            return false;
+        }
+        if (request[r] > available[r])
+            return false;
+    }
+
+    for (int r = 0; r < 3; r++)
+    {
+        available[r] -= request[r];
+        ship.allocation[r] += request[r];
+        ship.need[r] -= request[r];
+    }
+
+    return true;
+}
+
+bool requestIsSafe(vector<Process> &processes)
+{
+    vector<int> sequence;
+    if (isSafeState(processes, sequence))
+    {
+        cout << "  BANKER: SAFE. Sequence: ";
+        for (int pid : sequence)
+            cout << "P" << pid << " ";
+        cout << "\n";
+        return true;
+    }
+
+    cout << "  BANKER: UNSAFE. Request denied to prevent deadlock\n";
+    return false;
+}
+
+// SCHEDULING parT
 
 // true if a should be served before b
 // 1st rule: smaller priority number first (priority scheduling, with aging)
@@ -337,6 +551,49 @@ bool allDone(vector<Process> &ps)
     return true;
 }
 
+void writeJsonString(ofstream &file, const string &text)
+{
+    file << "\"";
+    for (char c : text)
+    {
+        if (c == '\\' || c == '\"')
+            file << '\\' << c;
+        else
+            file << c;
+    }
+    file << "\"";
+}
+
+struct OutputProcessFrame
+{
+    int pid;
+    string status;
+    int remaining;
+    int allocation[3];
+    int need[3];
+};
+
+struct BankerEventFrame
+{
+    int time;
+    int pid;
+    int request[3];
+    bool safe;
+    vector<int> sequence;
+};
+
+struct OutputFrame
+{
+    int time;
+    int availableBerths;
+    int availableCranes;
+    int availableTrucks;
+    vector<OutputProcessFrame> processes;
+};
+
+vector<OutputFrame> outputTimeline;
+vector<BankerEventFrame> bankerEvents;
+
 void printResults(vector<Process> &ps, int t)
 {
     cout << "\n------ RESULTS ------\n";
@@ -355,11 +612,93 @@ void printResults(vector<Process> &ps, int t)
     }
 
     cout << "Average turnaround = " << sumTat / n << "   Average wait = " << sumWait / n << "   Finished at t = " << t << "\n";
+
+    ofstream output("output.txt", ios::trunc);
+    if (!output.is_open())
+    {
+        cout << "ERROR: Could not create output.txt\n";
+        return;
+    }
+
+    output << fixed << setprecision(2);
+    output << "{\n";
+    output << "  \"timeline\": [\n";
+    for (int i = 0; i < (int)outputTimeline.size(); i++)
+    {
+        const OutputFrame &frame = outputTimeline[i];
+        output << "    {\"time\":" << frame.time << ",\"available\":["
+               << frame.availableBerths << "," << frame.availableCranes << "," << frame.availableTrucks
+               << "],\"processes\":[";
+        for (int p = 0; p < (int)frame.processes.size(); p++)
+        {
+            const OutputProcessFrame &process = frame.processes[p];
+            output << "{\"pid\":" << process.pid << ",\"status\":";
+            writeJsonString(output, process.status);
+            output << ",\"remaining\":" << process.remaining
+                   << ",\"allocation\":[" << process.allocation[0] << "," << process.allocation[1] << "," << process.allocation[2]
+                   << "],\"need\":[" << process.need[0] << "," << process.need[1] << "," << process.need[2] << "]}";
+            if (p + 1 < (int)frame.processes.size())
+                output << ",";
+        }
+        output << "]}";
+        if (i + 1 < (int)outputTimeline.size())
+            output << ",";
+        output << "\n";
+    }
+    output << "  ],\n";
+    output << "  \"bankerEvents\": [\n";
+    for (int i = 0; i < (int)bankerEvents.size(); i++)
+    {
+        const BankerEventFrame &event = bankerEvents[i];
+        output << "    {\"time\":" << event.time << ",\"pid\":" << event.pid
+               << ",\"request\":[" << event.request[0] << "," << event.request[1] << "," << event.request[2]
+               << "],\"safe\":" << (event.safe ? "true" : "false") << ",\"sequence\":[";
+        for (int s = 0; s < (int)event.sequence.size(); s++)
+        {
+            if (s > 0)
+                output << ",";
+            output << event.sequence[s];
+        }
+        output << "]}";
+        if (i + 1 < (int)bankerEvents.size())
+            output << ",";
+        output << "\n";
+    }
+    output << "  ],\n";
+    output << "  \"finalMetrics\": {\n";
+    output << "    \"averageTurnaround\": " << (sumTat / n) << ",\n";
+    output << "    \"averageWait\": " << (sumWait / n) << ",\n";
+    output << "    \"finishedAt\": " << t << "\n";
+    output << "  },\n";
+    output << "  \"results\": [\n";
+
+    for (int i = 0; i < n; i++)
+    {
+        int tat = ps[i].finish - ps[i].arrival;
+        int wait = tat - ps[i].burst;
+        output << "    {\"pid\":" << ps[i].pid << ",\"ship\":";
+        writeJsonString(output, shipName(ps[i].ship_id));
+        output << ",\"start\":" << ps[i].start << ",\"finish\":" << ps[i].finish
+               << ",\"turnaround\":" << tat << ",\"wait\":" << wait << "}";
+        if (i + 1 < n)
+            output << ",";
+        output << "\n";
+    }
+
+    output << "  ],\n";
+    output << "  \"port\": {\"total\":[" << total[0] << "," << total[1] << "," << total[2]
+           << "],\"resourceNames\":[\"Berth\",\"Crane\",\"Truck\"]}\n";
+    output << "}\n";
+    output.close();
+    cout << "File output written to output.txt\n";
 }
 
 // Priority scheduling + FCFS (for equal priority) + aging
 void simulate(vector<Process> ps)
 {
+    outputTimeline.clear();
+    bankerEvents.clear();
+
     int agingTime = 2; // every 2 seconds of waiting, priority improves
     for (int r = 0; r < 3; r++)
         available[r] = total[r];
@@ -373,6 +712,8 @@ void simulate(vector<Process> ps)
         cout << "\n[t=" << t << "] free: ";
         printAvailable();
         cout << "\n";
+        int bankerAvailable[3] = {available[0], available[1], available[2]};
+        printBankerTables(ps, bankerAvailable);
 
         // 1. ships that arrive now
         for (int i = 0; i < n; i++)
@@ -387,16 +728,14 @@ void simulate(vector<Process> ps)
         }
 
         // 2. list the waiting ships and sort them (bubble sort)
-        int order[20];
-        int count = 0;
+        vector<int> order;
         for (int i = 0; i < n; i++)
         {
             if (ps[i].state == WAITING)
-            {
-                order[count] = i;
-                count++;
-            }
+                order.push_back(i);
         }
+        int count = order.size();
+
         for (int a = 0; a < count - 1; a++)
         {
             for (int b = 0; b < count - 1 - a; b++)
@@ -410,39 +749,83 @@ void simulate(vector<Process> ps)
             }
         }
 
-        // 3. go through the queue in order: a ship starts only if it can get EVERYTHING it needs
+        // 3. Each waiting process submits one unit of each needed resource type.
+        // Banker may grant or reject each partial request.
         for (int k = 0; k < count; k++)
         {
             int i = order[k];
+            int request[3] = {0, 0, 0};
 
-            if (canStart(ps[i]))
+            for (int r = 0; r < 3; r++)
+            {
+                if (ps[i].need[r] > 0 && available[r] > 0)
+                    request[r] = 1;
+            }
+
+            if (request[0] == 0 && request[1] == 0 && request[2] == 0)
+            {
+                cout << "  WAIT  : ";
+                printName(ps[i]);
+                cout << " no safe resource units are currently available\n";
+                continue;
+            }
+
+            cout << "  BANKER: ";
+            printName(ps[i]);
+            cout << " requests B=" << request[0] << " C=" << request[1]
+                 << " T=" << request[2] << "\n";
+
+            if (!requestResources(ps[i], request))
+            {
+                cout << "  BANKER: Request denied by availability checks\n";
+                continue;
+            }
+
+            vector<int> safeSequence;
+            bool safe = isSafeState(ps, safeSequence);
+            bankerEvents.push_back({t, ps[i].pid, {request[0], request[1], request[2]}, safe, safeSequence});
+
+            if (!safe)
             {
                 for (int r = 0; r < 3; r++)
-                    available[r] = available[r] - ps[i].needed[r];
-                allocateResources(berths, ps[i].needed[0], ps[i].burst, ps[i].allocatedBerths);
-                allocateResources(cranes, ps[i].needed[1], ps[i].burst, ps[i].allocatedCranes);
-                allocateResources(trucks, ps[i].needed[2], ps[i].burst, ps[i].allocatedTrucks);
+                {
+                    available[r] += request[r];
+                    ps[i].allocation[r] -= request[r];
+                    ps[i].need[r] += request[r];
+                }
+                continue;
+            }
+
+            allocateResources(berths, request[0], ps[i].burst, ps[i].allocatedBerths);
+            allocateResources(cranes, request[1], ps[i].burst, ps[i].allocatedCranes);
+            allocateResources(trucks, request[2], ps[i].burst, ps[i].allocatedTrucks);
+            ps[i].needed[0] = ps[i].need[0];
+            ps[i].needed[1] = ps[i].need[1];
+            ps[i].needed[2] = ps[i].need[2];
+
+            cout << "  GRANT : ";
+            printName(ps[i]);
+            cout << " receives B=" << request[0] << " C=" << request[1]
+                 << " T=" << request[2]
+                 << "; allocation now B=" << ps[i].allocation[0]
+                 << " C=" << ps[i].allocation[1]
+                 << " T=" << ps[i].allocation[2] << "\n";
+
+            bool maximumReached = true;
+            for (int r = 0; r < 3; r++)
+            {
+                if (ps[i].allocation[r] != ps[i].maximum[r])
+                    maximumReached = false;
+            }
+
+            if (maximumReached && ps[i].state == WAITING)
+            {
                 ps[i].state = RUNNING;
                 ps[i].start = t;
                 ps[i].timeleft = ps[i].burst;
                 cout << "  START : ";
                 printName(ps[i]);
-                cout << " gets B=" << ps[i].needed[0] << " C=" << ps[i].needed[1] << " T=" << ps[i].needed[2] << ", works for " << ps[i].burst << "s\n";
-            }
-            else
-            {
-                cout << "  WAIT  : ";
-                printName(ps[i]);
-                cout << " (priority " << ps[i].effectivePriority << ") not enough:";
-                for (int r = 0; r < 3; r++)
-                {
-                    if (ps[i].needed[r] > available[r])
-                    {
-                        cout << " " << resName[r] << "(needs " << ps[i].needed[r]
-                             << ", free " << available[r] << ")";
-                    }
-                }
-                cout << "\n";
+                cout << " has received its maximum resources and starts\n";
             }
         }
 
@@ -458,7 +841,12 @@ void simulate(vector<Process> ps)
                     ps[i].state = DONE;
                     ps[i].finish = t + 1;
                     for (int r = 0; r < 3; r++)
-                        available[r] = available[r] + ps[i].needed[r];
+                    {
+                        available[r] = available[r] + ps[i].allocation[r];
+                        ps[i].allocation[r] = 0;
+                        ps[i].need[r] = 0;
+                        ps[i].needed[r] = 0;
+                    }
                     releaseResources(berths, ps[i].allocatedBerths);
                     releaseResources(cranes, ps[i].allocatedCranes);
                     releaseResources(trucks, ps[i].allocatedTrucks);
@@ -489,17 +877,41 @@ void simulate(vector<Process> ps)
             }
         }
 
+        OutputFrame frame;
+        frame.time = t;
+        frame.availableBerths = available[0];
+        frame.availableCranes = available[1];
+        frame.availableTrucks = available[2];
+        for (int i = 0; i < n; i++)
+        {
+            string status = "Not arrived";
+            if (ps[i].state == WAITING)
+                status = "Waiting";
+            else if (ps[i].state == RUNNING)
+                status = "Running";
+            else if (ps[i].state == DONE)
+                status = "Done";
+            OutputProcessFrame processFrame;
+            processFrame.pid = ps[i].pid;
+            processFrame.status = status;
+            processFrame.remaining = ps[i].state == RUNNING ? ps[i].timeleft : -1;
+            for (int r = 0; r < 3; r++)
+            {
+                processFrame.allocation[r] = ps[i].allocation[r];
+                processFrame.need[r] = ps[i].need[r];
+            }
+            frame.processes.push_back(processFrame);
+        }
+        outputTimeline.push_back(frame);
         t++;
     }
     printResources();
     printResults(ps, t);
 }
 
-//main
+// main
 int main()
 {
-    
-
     vector<Process> Port_Queue;
     Port_Queue = readfromfile();
 
@@ -508,10 +920,32 @@ int main()
          << total[2] << " trucks\n";
     cout << "Scheduling: Priority + FCFS (tie-break) + Aging\n";
 
-    // a ship that needs more than the whole port owns could never start
+    if (Port_Queue.empty())
+    {
+        cout << "ERROR: No valid PROCESS rows were read from input.txt\n";
+        return 1;
+    }
+
+    // Validate both ship references and port capacity from input.txt.
     int count = Port_Queue.size();
     for (int i = 0; i < count; i++)
     {
+        bool shipExists = false;
+        for (const Ship &ship : ships)
+        {
+            if (ship.ship_id == Port_Queue[i].ship_id)
+            {
+                shipExists = true;
+                break;
+            }
+        }
+        if (!shipExists)
+        {
+            cout << "ERROR: P" << Port_Queue[i].pid << " references unknown ship ID "
+                 << Port_Queue[i].ship_id << "\n";
+            return 1;
+        }
+
         for (int r = 0; r < 3; r++)
         {
             if (Port_Queue[i].needed[r] > total[r])
@@ -525,5 +959,4 @@ int main()
 
     simulate(Port_Queue);
     return 0;
-
 }
