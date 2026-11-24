@@ -1,89 +1,74 @@
-import { useState } from "react";
+import CraneRiskAssessment from "./CraneRiskAssessment";
+import { useCallback, useEffect, useState } from "react";
 
-// size order: a bigger resource can serve a smaller request
-export const RANK = { Small: 1, Medium: 2, Large: 3 };
 const BERTH_SIZES = ["Small", "Medium", "Large"];
-const SMALL_LARGE = ["Small", "Large"]; // cranes and trucks 
+const OTHER_SIZES = ["Small", "Large"];
 
-// fake "database" of old simulations
-const OLD = [
-  { id: 1, name: "Morning rush", date: "12 Oct",
-    berths: [{ num: 1, size: "Large" }, { num: 2, size: "Medium" }, { num: 3, size: "Small" }],
-    cranes: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }],
-    trucks: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }, { num: 3, size: "Small" }],
-    ships: [
-      { ship_id: 1, name: "MV Aurora", type: "Cargo", country: "Norway", captain_name: "Erik Hansen" },
-      { ship_id: 2, name: "Ever Dawn", type: "Container", country: "Taiwan", captain_name: "Li Wei" },
-    ],
-    processes: [
-      { pid: 1, ship_id: 1, arrival: 0, priority: 1, berthneeded: 4, craneneeded: 3, truckneeded: 2, berthsize: "Large", cranesize: "Large", trucksize: "Small" },
-      { pid: 2, ship_id: 2, arrival: 1, priority: 2, berthneeded: 5, craneneeded: 4, truckneeded: 3, berthsize: "Medium", cranesize: "Small", trucksize: "Small" },
-      { pid: 3, ship_id: 1, arrival: 2, priority: 1, berthneeded: 3, craneneeded: 2, truckneeded: 2, berthsize: "Small", cranesize: "Small", trucksize: "Small" },
-    ] },
-  { id: 2, name: "Storm backlog", date: "03 Oct",
-    berths: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }],
-    cranes: [{ num: 1, size: "Large" }],
-    trucks: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }],
-    ships: [
-      { ship_id: 1, name: "Maersk Lyra", type: "Container", country: "Denmark", captain_name: "A. Jensen" },
-      { ship_id: 2, name: "Blue Marlin", type: "Tanker", country: "Panama", captain_name: "R. Diaz" },
-    ],
-    processes: [
-      { pid: 1, ship_id: 1, arrival: 0, priority: 2, berthneeded: 6, craneneeded: 5, truckneeded: 3, berthsize: "Large", cranesize: "Large", trucksize: "Large" },
-      { pid: 2, ship_id: 2, arrival: 0, priority: 1, berthneeded: 5, craneneeded: 4, truckneeded: 3, berthsize: "Small", cranesize: "Small", trucksize: "Small" },
-    ] },
-    
-    
-];
-
-// Hardcoded demo: 4 ships, 6 requests, small port. Good for testing the run page.
 const DEMO = {
-  berths: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }],
-  cranes: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }],
-  trucks: [{ num: 1, size: "Large" }, { num: 2, size: "Small" }],
+  berths: [
+    { num: 1, size: "Large" },
+    { num: 2, size: "Medium" },
+    { num: 3, size: "Small" },
+    { num: 4, size: "Small" },
+  ],
+  cranes: [
+    { num: 1, size: "Large" },
+    { num: 2, size: "Small" },
+    { num: 3, size: "Small" },
+  ],
+  trucks: [
+    { num: 1, size: "Large" },
+    { num: 2, size: "Small" },
+  ],
   ships: [
     { ship_id: 1, name: "MV Aurora", type: "Cargo", country: "Norway", captain_name: "Erik Hansen" },
     { ship_id: 2, name: "Ever Dawn", type: "Container", country: "Taiwan", captain_name: "Li Wei" },
     { ship_id: 3, name: "Blue Marlin", type: "Tanker", country: "Panama", captain_name: "R. Diaz" },
-    { ship_id: 4, name: "Sea Queen", type: "Passenger", country: "Italy", captain_name: "M. Rossi" },
   ],
   processes: [
-    { pid: 1, ship_id: 1, arrival: 0, priority: 2, berthneeded: 4, craneneeded: 3, truckneeded: 2, berthsize: "Large", cranesize: "Large", trucksize: "Small" },
-    { pid: 2, ship_id: 2, arrival: 0, priority: 1, berthneeded: 3, craneneeded: 2, truckneeded: 2, berthsize: "Small", cranesize: "Small", trucksize: "Small" },
-    { pid: 3, ship_id: 3, arrival: 1, priority: 1, berthneeded: 3, craneneeded: 2, truckneeded: 2, berthsize: "Small", cranesize: "Small", trucksize: "Small" },
-    { pid: 4, ship_id: 4, arrival: 2, priority: 3, berthneeded: 2, craneneeded: 2, truckneeded: 1, berthsize: "Large", cranesize: "Large", trucksize: "Large" },
-    { pid: 5, ship_id: 1, arrival: 3, priority: 1, berthneeded: 2, craneneeded: 2, truckneeded: 1, berthsize: "Small", cranesize: "Small", trucksize: "Small" },
-    { pid: 6, ship_id: 2, arrival: 4, priority: 2, berthneeded: 3, craneneeded: 2, truckneeded: 2, berthsize: "Medium", cranesize: "Small", trucksize: "Large" },
+    { pid: 1, ship_id: 1, priority: 2, arrival: 0, burst: 4, berths: 2, cranes: 1, trucks: 1 },
+    { pid: 2, ship_id: 2, priority: 1, arrival: 0, burst: 3, berths: 1, cranes: 2, trucks: 1 },
+    { pid: 3, ship_id: 3, priority: 1, arrival: 1, burst: 3, berths: 2, cranes: 1, trucks: 1 },
+    { pid: 4, ship_id: 1, priority: 3, arrival: 2, burst: 2, berths: 1, cranes: 1, trucks: 1 },
   ],
 };
 
 const input = "w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500";
 const card = "bg-white rounded-2xl shadow p-5";
 
-// One reusable box: pick a type, click Add, see the list, remove items
+async function fetchSavedSimulations() {
+  const response = await fetch("/api/simulations");
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Could not load saved simulations.");
+  return data;
+}
+
 function ResourceBox({ title, icon, sizes, list, setList }) {
   const [size, setSize] = useState(sizes[0]);
 
   function add() {
-    const num = list.length ? Math.max(...list.map((r) => r.num)) + 1 : 1;
+    const num = list.length ? Math.max(...list.map((resource) => resource.num)) + 1 : 1;
     setList([...list, { num, size }]);
   }
 
   return (
-    <div className="bg-sky-50 rounded-xl p-3">
+    <div className="rounded-xl bg-sky-50 p-3">
       <b>{icon} {title} ({list.length})</b>
-      <div className="flex gap-2 mt-2">
-        <select className={input} value={size} onChange={(e) => setSize(e.target.value)}>
-          {sizes.map((s) => <option key={s}>{s}</option>)}
+      <div className="mt-2 flex gap-2">
+        <select className={input} value={size} onChange={(event) => setSize(event.target.value)}>
+          {sizes.map((item) => <option key={item}>{item}</option>)}
         </select>
-        <button onClick={add} className="bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-4">Add</button>
+        <button type="button" onClick={add} className="rounded-lg bg-sky-600 px-4 text-white hover:bg-sky-700">Add</button>
       </div>
       <div className="mt-2 space-y-1">
         {list.length === 0 && <p className="text-sm text-slate-400">None yet</p>}
-        {list.map((r) => (
-          <div key={r.num} className="flex justify-between bg-white rounded-lg px-3 py-1.5 text-sm">
-            <span>{title.slice(0, -1)} {r.num} · <b>{r.size}</b></span>
-            <button onClick={() => setList(list.filter((x) => x.num !== r.num))} className="text-red-500">✕</button>
+        {list.map((resource) => (
+          <div key={resource.num} className="flex justify-between rounded-lg bg-white px-3 py-1.5 text-sm">
+            <div className="min-w-0 flex-1">
+              <span>{title.slice(0, -1)} {resource.num} · <b>{resource.size}</b></span>
+              {title === "Cranes" && <CraneRiskAssessment craneNumber={resource.num} />}
+            </div>
+            <button type="button" aria-label={`Remove ${title.slice(0, -1)} ${resource.num}`} onClick={() => setList(list.filter((item) => item.num !== resource.num))} className="text-red-500">✕</button>
           </div>
         ))}
       </div>
@@ -92,217 +77,312 @@ function ResourceBox({ title, icon, sizes, list, setList }) {
 }
 
 export default function CreateSimulation({ onRun }) {
-  const [berths, setBerths] = useState([{ num: 1, size: "Large" }, { num: 2, size: "Small" }]);
-  const [cranes, setCranes] = useState([{ num: 1, size: "Large" }]);
-  const [trucks, setTrucks] = useState([{ num: 1, size: "Small" }, { num: 2, size: "Large" }]);
-
+  const [berths, setBerths] = useState([{ num: 1, size: "Large" }, { num: 2, size: "Small" }, { num: 3, size: "Small" }, { num: 4, size: "Small" }]);
+  const [cranes, setCranes] = useState([{ num: 1, size: "Large" }, { num: 2, size: "Small" }, { num: 3, size: "Small" }]);
+  const [trucks, setTrucks] = useState([{ num: 1, size: "Large" }, { num: 2, size: "Small" }]);
   const [ships, setShips] = useState([]);
   const [processes, setProcesses] = useState([]);
-
   const [shipForm, setShipForm] = useState({ name: "", type: "Cargo", country: "", captain_name: "" });
-  const [reqForm, setReqForm] = useState({
-    ship_id: "", arrival: 0, priority: 1,
-    berthneeded: 3, craneneeded: 2, truckneeded: 2,
-    berthsize: "Small", cranesize: "Small", trucksize: "Small",
+  const [requestForm, setRequestForm] = useState({
+    ship_id: "", arrival: 0, priority: 1, burst: 3, berths: 1, cranes: 1, trucks: 1,
   });
-  const [selected, setSelected] = useState(null);
+  const [simulationName, setSimulationName] = useState("");
+  const [savedSimulations, setSavedSimulations] = useState([]);
+  const [savedLoading, setSavedLoading] = useState(true);
+  const [savedError, setSavedError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loadingSimulationId, setLoadingSimulationId] = useState(null);
+  const [deletingSimulationId, setDeletingSimulationId] = useState(null);
+  const [deleteMessage, setDeleteMessage] = useState("");
 
   function addShip() {
-    if (!shipForm.name) return;
-    const ship = { ...shipForm, ship_id: ships.length + 1 };
-    setShips([...ships, ship]);
+    if (!shipForm.name.trim()) return;
+    const ship_id = ships.length ? Math.max(...ships.map((ship) => ship.ship_id)) + 1 : 1;
+    setShips([...ships, { ...shipForm, ship_id }]);
     setShipForm({ name: "", type: "Cargo", country: "", captain_name: "" });
-    if (!reqForm.ship_id) setReqForm({ ...reqForm, ship_id: ship.ship_id });
+    if (!requestForm.ship_id) setRequestForm({ ...requestForm, ship_id });
   }
 
   function addRequest() {
-    if (!reqForm.ship_id) return;
-    setProcesses([...processes, { ...reqForm, pid: processes.length + 1 }]);
-    setReqForm({ ...reqForm, arrival: reqForm.arrival + 1 });
+    if (!requestForm.ship_id) return;
+    const pid = processes.length ? Math.max(...processes.map((process) => process.pid)) + 1 : 1;
+    setProcesses([...processes, { ...requestForm, pid }]);
+    setRequestForm({ ...requestForm, arrival: Number(requestForm.arrival) + 1 });
   }
 
-  // a request can never run if no resource is big enough, so warn before running
-  const biggest = (list) => Math.max(0, ...list.map((r) => RANK[r.size]));
+  const setShipField = (key) => (event) => setShipForm({ ...shipForm, [key]: event.target.value });
+  const setRequestField = (key) => (event) => setRequestForm({ ...requestForm, [key]: Number(event.target.value) });
+  const shipName = (id) => ships.find((ship) => ship.ship_id === Number(id))?.name ?? "Unknown ship";
+
+  const refreshSavedSimulations = useCallback(async () => {
+    setSavedLoading(true);
+    setSavedError("");
+    try {
+      setSavedSimulations(await fetchSavedSimulations());
+    } catch (error) {
+      setSavedError(error.message);
+    } finally {
+      setSavedLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSavedSimulations()
+      .then((data) => {
+        if (!cancelled) setSavedSimulations(data);
+      })
+      .catch((error) => {
+        if (!cancelled) setSavedError(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) setSavedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveSimulation() {
+    setSaving(true);
+    setSaveMessage("");
+    setSavedError("");
+    try {
+      const response = await fetch("/api/simulations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: simulationName.trim(),
+          configuration: { berths, cranes, trucks, ships, processes },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save simulation.");
+      setSaveMessage(`Saved "${data.name}".`);
+      await refreshSavedSimulations();
+    } catch (error) {
+      setSaveMessage("");
+      setSavedError(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadSavedSimulation(simulationId) {
+    setLoadingSimulationId(simulationId);
+    setSavedError("");
+    try {
+      const response = await fetch(`/api/simulations/${simulationId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load this simulation.");
+      onRun(data.configuration);
+    } catch (error) {
+      setSavedError(error.message);
+    } finally {
+      setLoadingSimulationId(null);
+    }
+  }
+
+  async function deleteSavedSimulation(simulation) {
+    if (!window.confirm(`Delete "${simulation.name}" and all of its saved data? This cannot be undone.`)) return;
+
+    setDeletingSimulationId(simulation.id);
+    setSavedError("");
+    setDeleteMessage("");
+    try {
+      const response = await fetch(`/api/simulations/${simulation.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Could not delete this simulation.");
+      }
+      setSavedSimulations((current) => current.filter((item) => item.id !== simulation.id));
+      setDeleteMessage(`Deleted "${simulation.name}".`);
+    } catch (error) {
+      setSavedError(error.message);
+    } finally {
+      setDeletingSimulationId(null);
+    }
+  }
+
   const problems = [];
-  processes.forEach((p) => {
-    if (RANK[p.berthsize] > biggest(berths)) problems.push(`P${p.pid} needs a ${p.berthsize} berth, but the port has none that big`);
-    if (RANK[p.cranesize] > biggest(cranes)) problems.push(`P${p.pid} needs a ${p.cranesize} crane, but the port has none that big`);
-    if (RANK[p.trucksize] > biggest(trucks)) problems.push(`P${p.pid} needs a ${p.trucksize} truck, but the port has none that big`);
+  processes.forEach((process) => {
+    if (process.berths > berths.length) problems.push(`P${process.pid} requests ${process.berths} berths, but the port has ${berths.length}.`);
+    if (process.cranes > cranes.length) problems.push(`P${process.pid} requests ${process.cranes} cranes, but the port has ${cranes.length}.`);
+    if (process.trucks > trucks.length) problems.push(`P${process.pid} requests ${process.trucks} trucks, but the port has ${trucks.length}.`);
   });
+  const requestIsValid = requestForm.ship_id
+    && requestForm.arrival >= 0
+    && requestForm.priority >= 1
+    && requestForm.burst >= 1
+    && requestForm.berths + requestForm.cranes + requestForm.trucks > 0
+    && requestForm.berths <= berths.length
+    && requestForm.cranes <= cranes.length
+    && requestForm.trucks <= trucks.length;
 
-  // fill the whole form with the demo data so you can see / edit it
   function loadDemo() {
-    setBerths(DEMO.berths); setCranes(DEMO.cranes); setTrucks(DEMO.trucks);
-    setShips(DEMO.ships); setProcesses(DEMO.processes);
-    setReqForm({ ...reqForm, ship_id: 1, arrival: 5 });
+    setBerths(DEMO.berths);
+    setCranes(DEMO.cranes);
+    setTrucks(DEMO.trucks);
+    setShips(DEMO.ships);
+    setProcesses(DEMO.processes);
+    setRequestForm({ ship_id: 1, arrival: 3, priority: 1, burst: 3, berths: 1, cranes: 1, trucks: 1 });
   }
-
-  const shipName = (list, id) => list.find((s) => s.ship_id === Number(id))?.name;
-  const setS = (k) => (e) => setShipForm({ ...shipForm, [k]: e.target.value });
-  const setR = (k, isText) => (e) => setReqForm({ ...reqForm, [k]: isText ? e.target.value : Number(e.target.value) });
 
   return (
     <div className="min-h-screen bg-sky-50">
-      <div className="bg-sky-900 text-white p-6">
+      <header className="bg-sky-900 p-6 text-white">
         <h1 className="text-3xl font-bold">⚓ Port Simulator</h1>
-        <p className="text-sky-200">Build your port, register ships, send requests, watch what happens.</p>
-      </div>
+        <p className="mt-1 text-sky-200">Configure the port and run the C++ scheduling and Banker’s algorithm simulation.</p>
+        <button type="button" onClick={loadDemo} className="mt-3 rounded-lg bg-sky-700 px-4 py-2 hover:bg-sky-600">Load example</button>
+      </header>
 
-      <div className="max-w-6xl mx-auto p-6 grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
-          {/* quick demo */}
-          <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[12rem]">
-              <b>Try the demo</b>
-              <p className="text-sm text-slate-600">4 ships, 6 requests, 2 berths. Shows priority, waiting and size matching.</p>
-            </div>
-            <button onClick={() => onRun(DEMO)} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2">▶ Run demo now</button>
-            <button onClick={loadDemo} className="border border-emerald-600 text-emerald-700 rounded-lg px-4 py-2">Load demo into form</button>
+      <main className="mx-auto max-w-6xl space-y-5 p-6">
+        <section className={card}>
+          <h2 className="mb-1 text-xl font-semibold">1. Port resources</h2>
+          <p className="mb-3 text-sm text-slate-500">Sizes are shown as resource information; the current C++ scheduler allocates by counts, not by size. Use “Assess crane risk with MLP” under a crane to run and save a demonstration risk assessment.</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <ResourceBox title="Berths" icon="⚓" sizes={BERTH_SIZES} list={berths} setList={setBerths} />
+            <ResourceBox title="Cranes" icon="🏗" sizes={OTHER_SIZES} list={cranes} setList={setCranes} />
+            <ResourceBox title="Trucks" icon="🚚" sizes={OTHER_SIZES} list={trucks} setList={setTrucks} />
           </div>
-          {/* 1. resources */}
-          <div className={card}>
-            <h2 className="text-xl font-semibold mb-3">1. Port resources</h2>
-            <div className="grid md:grid-cols-3 gap-3">
-              <ResourceBox title="Berths" icon="⚓" sizes={BERTH_SIZES} list={berths} setList={setBerths} />
-              <ResourceBox title="Cranes" icon="🏗" sizes={SMALL_LARGE} list={cranes} setList={setCranes} />
-              <ResourceBox title="Trucks" icon="🚚" sizes={SMALL_LARGE} list={trucks} setList={setTrucks} />
-            </div>
-          </div>
+        </section>
 
-          {/* 2. ships */}
-          <div className={card}>
-            <h2 className="text-xl font-semibold mb-3">2. Register ships</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <label>Ship name<input className={input} value={shipForm.name} onChange={setS("name")} placeholder="MV Aurora" /></label>
-              <label>Type
-                <select className={input} value={shipForm.type} onChange={setS("type")}>
-                  <option>Cargo</option><option>Container</option><option>Tanker</option><option>Passenger</option>
+        <section className={card}>
+          <h2 className="mb-3 text-xl font-semibold">2. Register ships</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label>Ship name<input className={input} value={shipForm.name} onChange={setShipField("name")} placeholder="MV Aurora" /></label>
+            <label>Type
+              <select className={input} value={shipForm.type} onChange={setShipField("type")}>
+                <option>Cargo</option><option>Container</option><option>Tanker</option><option>Passenger</option>
+              </select>
+            </label>
+            <label>Country<input className={input} value={shipForm.country} onChange={setShipField("country")} placeholder="Norway" /></label>
+            <label>Captain name<input className={input} value={shipForm.captain_name} onChange={setShipField("captain_name")} placeholder="Erik Hansen" /></label>
+          </div>
+          <button type="button" disabled={!shipForm.name.trim()} onClick={addShip} className="mt-3 rounded-lg bg-sky-600 px-5 py-2 text-white hover:bg-sky-700 disabled:opacity-40">Add ship</button>
+          <div className="mt-4 space-y-2">
+            {ships.length === 0 && <p className="text-slate-400">No ships registered yet.</p>}
+            {ships.map((ship) => (
+              <div key={ship.ship_id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm">
+                <span>🚢 <b>#{ship.ship_id} {ship.name}</b></span>
+                <span className="text-slate-600">{ship.type} · {ship.country || "—"} · Capt. {ship.captain_name || "—"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={card}>
+          <h2 className="mb-1 text-xl font-semibold">3. Ship requests</h2>
+          <p className="mb-3 text-sm text-slate-500">Each request defines arrival, priority, one shared burst duration, and maximum counts of berths, cranes, and trucks.</p>
+          {ships.length === 0 ? <p className="text-amber-600">Register a ship first.</p> : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="sm:col-span-3">Ship
+                <select className={input} value={requestForm.ship_id} onChange={(event) => setRequestForm({ ...requestForm, ship_id: Number(event.target.value) })}>
+                  <option value="">Select a ship</option>
+                  {ships.map((ship) => <option key={ship.ship_id} value={ship.ship_id}>#{ship.ship_id} {ship.name}</option>)}
                 </select>
               </label>
-              <label>Country<input className={input} value={shipForm.country} onChange={setS("country")} placeholder="Norway" /></label>
-              <label>Captain name<input className={input} value={shipForm.captain_name} onChange={setS("captain_name")} placeholder="Erik Hansen" /></label>
-            </div>
-            <button onClick={addShip} className="mt-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-5 py-2">Add ship</button>
-
-            <div className="mt-4 space-y-2">
-              {ships.length === 0 && <p className="text-slate-400">No ships registered yet.</p>}
-              {ships.map((s) => (
-                <div key={s.ship_id} className="flex justify-between bg-sky-50 rounded-lg px-3 py-2 text-sm">
-                  <span>🚢 <b>#{s.ship_id} {s.name}</b></span>
-                  <span className="text-slate-600">{s.type} · {s.country || "—"} · Capt. {s.captain_name || "—"}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 3. requests */}
-          <div className={card}>
-            <h2 className="text-xl font-semibold mb-1">3. Ship requests (queue)</h2>
-            <p className="text-sm text-slate-500 mb-3">Pick how long and what size of berth, crane and truck the ship needs. A bigger resource can serve a smaller request.</p>
-
-            {ships.length === 0 ? <p className="text-amber-600">Register a ship first.</p> : (
-              <div className="grid grid-cols-3 gap-3">
-                <label className="col-span-3">Ship
-                  <select className={input} value={reqForm.ship_id} onChange={setR("ship_id")}>
-                    {ships.map((s) => <option key={s.ship_id} value={s.ship_id}>#{s.ship_id} {s.name}</option>)}
-                  </select>
-                </label>
-                <label>Arrives at (s)<input type="number" min="0" className={input} value={reqForm.arrival} onChange={setR("arrival")} /></label>
-                <label>Priority (1 = first)<input type="number" min="1" className={input} value={reqForm.priority} onChange={setR("priority")} /></label>
-                <span />
-
-                <label>Berth time (s)<input type="number" min="1" className={input} value={reqForm.berthneeded} onChange={setR("berthneeded")} /></label>
-                <label>Crane time (s)<input type="number" min="1" className={input} value={reqForm.craneneeded} onChange={setR("craneneeded")} /></label>
-                <label>Truck time (s)<input type="number" min="1" className={input} value={reqForm.truckneeded} onChange={setR("truckneeded")} /></label>
-
-                <label>Berth size
-                  <select className={input} value={reqForm.berthsize} onChange={setR("berthsize", true)}>{BERTH_SIZES.map((s) => <option key={s}>{s}</option>)}</select>
-                </label>
-                <label>Crane size
-                  <select className={input} value={reqForm.cranesize} onChange={setR("cranesize", true)}>{SMALL_LARGE.map((s) => <option key={s}>{s}</option>)}</select>
-                </label>
-                <label>Truck size
-                  <select className={input} value={reqForm.trucksize} onChange={setR("trucksize", true)}>{SMALL_LARGE.map((s) => <option key={s}>{s}</option>)}</select>
-                </label>
-
-                <button onClick={addRequest} className="bg-sky-600 hover:bg-sky-700 text-white rounded-lg py-2 col-span-3">Add request to queue</button>
-              </div>
-            )}
-
-            <div className="mt-4 space-y-2">
-              {processes.map((p) => (
-                <div key={p.pid} className="flex items-center justify-between bg-sky-50 rounded-lg px-3 py-2 text-sm">
-                  <span><b>P{p.pid}</b> · {shipName(ships, p.ship_id)}</span>
-                  <span className="text-slate-600">t={p.arrival}s · prio {p.priority} · {p.berthsize} berth {p.berthneeded}s · {p.cranesize} crane {p.craneneeded}s · {p.trucksize} truck {p.truckneeded}s</span>
-                  <button onClick={() => setProcesses(processes.filter((x) => x.pid !== p.pid))} className="text-red-500">✕</button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {problems.length > 0 && (
-            <div className="bg-amber-100 text-amber-800 rounded-xl p-4 text-sm">
-              {problems.map((m, i) => <p key={i}>⚠ {m}</p>)}
-              <p className="mt-1">Add a bigger resource or change the request.</p>
+              <label>Arrival time<input type="number" min="0" className={input} value={requestForm.arrival} onChange={setRequestField("arrival")} /></label>
+              <label>Priority (1 = highest)<input type="number" min="1" className={input} value={requestForm.priority} onChange={setRequestField("priority")} /></label>
+              <label>Burst duration<input type="number" min="1" className={input} value={requestForm.burst} onChange={setRequestField("burst")} /></label>
+              <label>Berths requested<input type="number" min="0" max={berths.length} className={input} value={requestForm.berths} onChange={setRequestField("berths")} /></label>
+              <label>Cranes requested<input type="number" min="0" max={cranes.length} className={input} value={requestForm.cranes} onChange={setRequestField("cranes")} /></label>
+              <label>Trucks requested<input type="number" min="0" max={trucks.length} className={input} value={requestForm.trucks} onChange={setRequestField("trucks")} /></label>
+              <button type="button" disabled={!requestIsValid} onClick={addRequest} className="rounded-lg bg-sky-600 py-2 text-white hover:bg-sky-700 disabled:opacity-40 sm:col-span-3">Add request to queue</button>
             </div>
           )}
 
-          <button
-            disabled={processes.length === 0 || problems.length > 0 || !berths.length || !cranes.length || !trucks.length}
-            onClick={() => onRun({ berths, cranes, trucks, ships, processes })}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-lg font-semibold rounded-2xl py-4"
-          >
-            ▶ Run simulation
-          </button>
-        </div>
-
-        {/* old simulations */}
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Old simulations</h2>
-          <div className="space-y-3">
-            {OLD.map((sim) => (
-              <button key={sim.id} onClick={() => setSelected(sim)}
-                className="w-full text-left bg-white rounded-2xl shadow p-4 hover:ring-2 hover:ring-sky-400">
-                <div className="flex justify-between"><b>{sim.name}</b><span className="text-slate-400">{sim.date}</span></div>
-                <p className="text-sm text-slate-600">{sim.berths.length} berths · {sim.cranes.length} cranes · {sim.processes.length} requests</p>
-              </button>
+          <div className="mt-4 space-y-2">
+            {processes.map((process) => (
+              <div key={process.pid} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm">
+                <span><b>P{process.pid}</b> · {shipName(process.ship_id)}</span>
+                <span className="text-slate-600">t={process.arrival} · priority {process.priority} · burst {process.burst} · B/C/T: {process.berths}/{process.cranes}/{process.trucks}</span>
+                <button type="button" aria-label={`Remove P${process.pid}`} onClick={() => setProcesses(processes.filter((item) => item.pid !== process.pid))} className="text-red-500">✕</button>
+              </div>
             ))}
           </div>
-        </div>
-      </div>
+        </section>
 
-      {selected && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between">
-              <h3 className="text-2xl font-bold">{selected.name}</h3>
-              <button onClick={() => setSelected(null)}>✕</button>
-            </div>
-            <p className="text-slate-500 mb-4">
-              Cranes: {selected.cranes.map((c) => c.size).join(", ")} · Trucks: {selected.trucks.map((t) => t.size).join(", ")}
-            </p>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {selected.berths.map((b, i) => {
-                const p = selected.processes[i];
-                return (
-                  <div key={b.num} className="rounded-xl overflow-hidden border">
-                    <div className="h-24 bg-sky-200 flex items-end justify-center text-5xl pb-1">
-                      {p ? <span className="bob">🚢</span> : <span className="text-sm text-sky-700 pb-8">empty</span>}
-                    </div>
-                    <div className="p-2 text-sm">
-                      <b>Berth {b.num}</b> <span className="text-slate-400">({b.size})</span>
-                      <p className="text-slate-500">{p ? `P${p.pid} · ${shipName(selected.ships, p.ship_id)}` : "—"}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <button onClick={() => onRun(selected)} className="mt-5 bg-sky-600 text-white rounded-lg px-5 py-2">Run this again</button>
+        <section className={card}>
+          <h2 className="mb-3 text-xl font-semibold">4. Save or load a simulation</h2>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="flex-1">Simulation name
+              <input
+                className={input}
+                maxLength={120}
+                value={simulationName}
+                onChange={(event) => setSimulationName(event.target.value)}
+                placeholder="e.g. Morning shift"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={saving || !simulationName.trim() || !berths.length || !cranes.length || !trucks.length || !ships.length || !processes.length || problems.length > 0}
+              onClick={saveSimulation}
+              className="self-end rounded-lg bg-sky-700 px-5 py-2 text-white hover:bg-sky-800 disabled:opacity-40"
+            >
+              {saving ? "Saving…" : "Save configuration"}
+            </button>
           </div>
-        </div>
-      )}
+          {saveMessage && <p className="mt-2 text-sm text-emerald-700" role="status">{saveMessage}</p>}
+          {deleteMessage && <p className="mt-2 text-sm text-emerald-700" role="status">{deleteMessage}</p>}
+          {savedError && <p className="mt-2 text-sm text-red-700" role="alert">{savedError}</p>}
+
+          <div className="mt-5 flex items-center justify-between">
+            <h3 className="font-semibold">Saved simulations</h3>
+            <button type="button" disabled={deletingSimulationId !== null} onClick={refreshSavedSimulations} className="text-sm text-sky-700 hover:underline disabled:opacity-40">
+              Refresh
+            </button>
+          </div>
+          {savedLoading ? <p className="mt-2 text-sm text-slate-500">Loading saved simulations…</p>
+            : savedSimulations.length === 0 ? <p className="mt-2 text-sm text-slate-500">No saved simulations yet.</p>
+              : (
+                <ul className="mt-2 space-y-2">
+                  {savedSimulations.map((simulation) => (
+                    <li key={simulation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-sky-50 px-3 py-2">
+                      <div>
+                        <p className="font-medium">{simulation.name}</p>
+                        <p className="text-xs text-slate-500">{new Date(simulation.created_at).toLocaleString()}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={loadingSimulationId !== null || deletingSimulationId !== null}
+                        onClick={() => loadSavedSimulation(simulation.id)}
+                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+                      >
+                        {loadingSimulationId === simulation.id ? "Loading…" : "Load and run"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={loadingSimulationId !== null || deletingSimulationId !== null}
+                        onClick={() => deleteSavedSimulation(simulation)}
+                        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+                      >
+                        {deletingSimulationId === simulation.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+        </section>
+
+        {problems.length > 0 && (
+          <div className="rounded-xl bg-amber-100 p-4 text-sm text-amber-800">
+            {problems.map((message) => <p key={message}>⚠ {message}</p>)}
+            <p className="mt-1">Increase the port capacity or reduce the request.</p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          disabled={processes.length === 0 || problems.length > 0 || !berths.length || !cranes.length || !trucks.length}
+          onClick={() => onRun({ berths, cranes, trucks, ships, processes })}
+          className="w-full rounded-2xl bg-emerald-600 py-4 text-lg font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+        >
+          ▶ Run simulation
+        </button>
+      </main>
     </div>
   );
 }

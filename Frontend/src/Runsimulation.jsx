@@ -1,221 +1,197 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
-const RANK = { Small: 1, Medium: 2, Large: 3 };
-
-// each resource slot: { num, size, pid (null = free), left }
-const makeSlots = (list) => list.map((r) => ({ ...r, pid: null, left: 0 }));
-
-function startState(config) {
-  return {
-    time: 0,
-    done: false,
-    procs: config.processes.map((p) => ({
-      ...p,
-      status: "not arrived",
-      berthremaining: p.berthneeded,
-      craneremaining: p.craneneeded,
-      truckremaining: p.truckneeded,
-    })),
-    berths: makeSlots(config.berths),
-    cranes: makeSlots(config.cranes),
-    trucks: makeSlots(config.trucks),
-    log: ["Simulation ready. Press Play or Next second."],
-  };
-}
-
-// find the SMALLEST free slot that is big enough for the request (-1 if none)
-function findFree(slots, needSize) {
-  let best = -1;
-  slots.forEach((s, i) => {
-    const fits = s.pid === null && RANK[s.size] >= RANK[needSize];
-    if (fits && (best === -1 || RANK[s.size] < RANK[slots[best].size])) best = i;
-  });
-  return best;
-}
-
-// Runs ONE second and returns the new state
-function nextSecond(old, ships) {
-  const t = old.time;
-  const procs = old.procs.map((p) => ({ ...p }));
-  const berths = old.berths.map((x) => ({ ...x }));
-  const cranes = old.cranes.map((x) => ({ ...x }));
-  const trucks = old.trucks.map((x) => ({ ...x }));
-  const log = [];
-
-  const name = (p) => `P${p.pid} (${ships.find((s) => s.ship_id === Number(p.ship_id))?.name})`;
-
-  // 1. new requests arrive
-  procs.forEach((p) => {
-    if (p.status === "not arrived" && p.arrival <= t) {
-      p.status = "waiting";
-      log.push(`[${t}s] ${name(p)} arrived, priority ${p.priority}`);
-    }
-  });
-
-  // 2. pick waiting requests: smallest priority number first, then earlier arrival
-  const waiting = procs
-    .filter((p) => p.status === "waiting")
-    .sort((a, b) => a.priority - b.priority || a.arrival - b.arrival);
-
-  waiting.forEach((p) => {
-    const b = findFree(berths, p.berthsize);
-    const c = findFree(cranes, p.cranesize);
-    const k = findFree(trucks, p.trucksize);
-
-    if (b !== -1 && c !== -1 && k !== -1) {
-      berths[b].pid = p.pid; berths[b].left = p.berthremaining;
-      cranes[c].pid = p.pid; cranes[c].left = p.craneremaining;
-      trucks[k].pid = p.pid; trucks[k].left = p.truckremaining;
-      p.status = "running";
-      log.push(`[${t}s] ✅ ${name(p)} selected → berth ${berths[b].num} (${berths[b].size}), crane ${cranes[c].num} (${cranes[c].size}), truck ${trucks[k].num} (${trucks[k].size})`);
-    } else {
-      const missing = [
-        b === -1 && `${p.berthsize}+ berth`,
-        c === -1 && `${p.cranesize}+ crane`,
-        k === -1 && `${p.trucksize}+ truck`,
-      ].filter(Boolean).join(", ");
-      log.push(`[${t}s] ⏳ ${name(p)} waits, no free ${missing}`);
-    }
-  });
-
-  // 3. every busy resource works 1 second and is freed when its time ends
-  function work(slots, label) {
-    slots.forEach((slot) => {
-      if (slot.pid === null) return;
-      slot.left--;
-      procs.find((x) => x.pid === slot.pid)[label + "remaining"] = slot.left;
-      if (slot.left === 0) {
-        log.push(`[${t + 1}s] ${label} ${slot.num} released by P${slot.pid}`);
-        slot.pid = null;
-      }
-    });
-  }
-  work(berths, "berth");
-  work(cranes, "crane");
-  work(trucks, "truck");
-
-  // 4. a request is done when it holds nothing anymore
-  procs.forEach((p) => {
-    const holding = [...berths, ...cranes, ...trucks].some((x) => x.pid === p.pid);
-    if (p.status === "running" && !holding) {
-      p.status = "done";
-      log.push(`[${t + 1}s] 🏁 ${name(p)} finished`);
-    }
-  });
-
-  const done = procs.every((p) => p.status === "done");
-  if (done) log.push("🎉 All requests are done!");
-
-  return { ...old, time: t + 1, procs, berths, cranes, trucks, done, log: [...old.log, ...log] };
-}
-
+const resources = [
+  { name: "Berths", icon: "⚓" },
+  { name: "Cranes", icon: "🏗️" },
+  { name: "Trucks", icon: "🚚" },
+];
 const badge = {
-  "not arrived": "bg-slate-200 text-slate-600",
-  waiting: "bg-amber-100 text-amber-700",
-  running: "bg-emerald-100 text-emerald-700",
-  done: "bg-sky-100 text-sky-700",
+  "Not arrived": "bg-slate-200 text-slate-600",
+  Waiting: "bg-amber-100 text-amber-700",
+  Running: "bg-emerald-100 text-emerald-700",
+  Done: "bg-sky-100 text-sky-700",
 };
 
-export default function RunSimulation({ config, onBack }) {
-  const [sim, setSim] = useState(startState(config));
-  const [playing, setPlaying] = useState(false);
-  const consoleBox = useRef(null);
-
-  useEffect(() => {
-    if (!playing || sim.done) return;
-    const timer = setInterval(() => setSim((s) => nextSecond(s, config.ships)), 1000);
-    return () => clearInterval(timer);
-  }, [playing, sim.done]);
-
-  // keep the console scrolled to the newest line (braces = returns nothing)
-  useEffect(() => {
-    const box = consoleBox.current;
-    if (box) box.scrollTop = box.scrollHeight;
-  }, [sim.log]);
-
-  const shipOf = (pid) => {
-    const p = sim.procs.find((x) => x.pid === pid);
-    return config.ships.find((s) => s.ship_id === Number(p.ship_id));
-  };
-  const btn = "px-4 py-2 rounded-lg font-medium text-white disabled:opacity-40";
-
-  // card for a crane or truck
-  const Slot = ({ icon, label, slot }) => (
-    <div className="bg-white rounded-xl shadow p-3 text-sm">
-      <div className="flex justify-between">
-        <b>{icon} {label} {slot.num} <span className="text-slate-400 font-normal">({slot.size})</span></b>
-        <span className="text-slate-500">{slot.pid ? `P${slot.pid}` : "Free"}</span>
+function ResourceSummary({ name, icon, total, available }) {
+  return (
+    <div className="rounded-xl bg-white p-4 shadow">
+      <p className="text-sm text-slate-500"><span className="mr-2 text-xl" role="img" aria-label={name}>{icon}</span>{name}</p>
+      <p className="text-2xl font-bold">{available} <span className="text-base font-normal text-slate-400">/ {total} available</span></p>
+      <div className="mt-2 h-2 rounded-full bg-slate-100">
+        <div className="h-2 rounded-full bg-sky-500" style={{ width: `${total ? ((total - available) / total) * 100 : 0}%` }} />
       </div>
-      {slot.pid && <p className="text-xs text-slate-500 mt-1">{slot.left}s left</p>}
     </div>
   );
+}
+
+export default function RunSimulation({ config, onBack }) {
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const [frameIndex, setFrameIndex] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function run() {
+      try {
+        const response = await fetch("/api/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(config),
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "The backend could not run the simulation.");
+        setResult(data);
+        setFrameIndex(0);
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") setError(requestError.message);
+      }
+    }
+    run();
+    return () => controller.abort();
+  }, [config]);
+
+  const timeline = result?.timeline ?? [];
+  useEffect(() => {
+    if (!playing || !timeline.length || frameIndex >= timeline.length - 1) return undefined;
+    const timer = window.setTimeout(() => {
+      const nextIndex = frameIndex + 1;
+      setFrameIndex(nextIndex);
+      if (nextIndex >= timeline.length - 1) setPlaying(false);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [playing, frameIndex, timeline.length]);
+
+  const frame = timeline[frameIndex];
+  const processDetails = new Map(config.processes.map((process) => [process.pid, process]));
+  const shipName = (pid) => {
+    const process = processDetails.get(pid);
+    return config.ships.find((ship) => ship.ship_id === process?.ship_id)?.name ?? "Unknown ship";
+  };
+  const button = "rounded-lg px-4 py-2 font-medium text-white disabled:opacity-40";
+
+  if (!result && !error) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-sky-50 p-6">
+        <div className="rounded-2xl bg-white p-8 text-center shadow">
+          <p className="text-xl font-semibold">Running C++ simulation…</p>
+          <p className="mt-2 text-slate-500">The backend is checking resource requests with Banker’s algorithm.</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="mx-auto max-w-2xl p-6">
+        <button onClick={onBack} className="mb-4 text-sky-700">← Back to setup</button>
+        <div role="alert" className="rounded-2xl bg-red-50 p-5 text-red-800">
+          <h1 className="text-xl font-bold">Simulation failed</h1>
+          <p className="mt-2 whitespace-pre-wrap">{error}</p>
+          <p className="mt-3 text-sm">For local development, start the frontend with <code>npm run dev</code> from the Frontend folder and ensure g++ is installed and available on PATH.</p>
+        </div>
+      </main>
+    );
+  };
+
+  const available = frame?.available ?? result.port.total;
 
   return (
     <div className="min-h-screen bg-sky-50">
-      <div className="bg-sky-900 text-white p-4 flex flex-wrap items-center gap-3">
+      <header className="flex flex-wrap items-center gap-3 bg-sky-900 p-4 text-white">
         <button onClick={onBack} className="text-sky-200">← Back</button>
-        <h1 className="text-2xl font-bold">⏱ Time: {sim.time}s</h1>
-        <div className="ml-auto flex gap-2">
-          <button className={btn + " bg-emerald-600"} disabled={sim.done} onClick={() => setPlaying(!playing)}>{playing ? "⏸ Pause" : "▶ Play"}</button>
-          <button className={btn + " bg-sky-600"} disabled={sim.done || playing} onClick={() => setSim(nextSecond(sim, config.ships))}>Next second ⏭</button>
-          <button className={btn + " bg-slate-600"} onClick={() => { setPlaying(false); setSim(startState(config)); }}>Reset</button>
+        <h1 className="text-2xl font-bold">Port simulation · t={frame?.time ?? 0}s</h1>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button className={`${button} bg-emerald-600`} disabled={!timeline.length || frameIndex === timeline.length - 1} onClick={() => setPlaying(!playing)}>{playing ? "⏸ Pause" : "▶ Play"}</button>
+          <button className={`${button} bg-sky-600`} disabled={playing || !timeline.length || frameIndex === timeline.length - 1} onClick={() => setFrameIndex((index) => Math.min(index + 1, timeline.length - 1))}>Next second ⏭</button>
+          <button className={`${button} bg-slate-600`} disabled={!timeline.length} onClick={() => { setPlaying(false); setFrameIndex(0); }}>Restart</button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto p-6 grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold mb-2">Berths</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {sim.berths.map((b) => (
-                <div key={b.num} className="bg-white rounded-2xl shadow overflow-hidden">
-                  <div className="h-28 bg-sky-200 flex items-end justify-center text-5xl pb-1">
-                    {b.pid ? <span className="bob">🚢</span> : <span className="text-sm text-sky-700 pb-10">empty</span>}
-                  </div>
-                  <div className="p-3">
-                    <b>Berth {b.num}</b> <span className="text-slate-400 text-sm">({b.size})</span>
-                    <p className="text-sm text-slate-500">{b.pid ? `P${b.pid} · ${shipOf(b.pid)?.name} · ${b.left}s left` : "Free"}</p>
-                  </div>
-                </div>
+      <main className="mx-auto max-w-7xl space-y-6 p-6">
+        <section>
+          <div className="mb-2 flex justify-between text-sm text-slate-600">
+            <h2 className="text-xl font-semibold text-slate-900">Available resources</h2>
+            <span>Snapshot {timeline.length ? frameIndex + 1 : 0} / {timeline.length}</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {resources.map(({ name, icon }, index) => (
+              <ResourceSummary key={name} name={name} icon={icon} total={result.port.total[index]} available={available[index]} />
+            ))}
+          </div>
+          <input
+            aria-label="Simulation timeline"
+            className="mt-4 w-full accent-sky-600"
+            type="range"
+            min="0"
+            max={Math.max(0, timeline.length - 1)}
+            value={frameIndex}
+            disabled={!timeline.length}
+            onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
+          />
+        </section>
+
+        <section className="overflow-x-auto rounded-2xl bg-white p-4 shadow">
+          <h2 className="mb-2 text-xl font-semibold">Processes at this time</h2>
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="text-left text-slate-500">
+              <tr><th className="py-2">PID / Ship</th><th>Status</th><th>Remaining</th><th>Request (B/C/T)</th><th>Allocated (B/C/T)</th><th>Still needed (B/C/T)</th></tr>
+            </thead>
+            <tbody>
+              {(frame?.processes ?? []).map((process) => {
+                const details = processDetails.get(process.pid);
+                return (
+                  <tr key={process.pid} className="border-t">
+                    <td className="py-2">P{process.pid} · {shipName(process.pid)}</td>
+                    <td><span className={`rounded-full px-3 py-1 ${badge[process.status] ?? badge.Waiting}`}>{process.status}</span></td>
+                    <td>{process.remaining < 0 ? "—" : `${process.remaining}s`}</td>
+                    <td>{[details.berths, details.cranes, details.trucks].join(" / ")}</td>
+                    <td>{process.allocation.join(" / ")}</td>
+                    <td>{process.need.join(" / ")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="overflow-x-auto rounded-2xl bg-white p-4 shadow">
+          <h2 className="mb-2 text-xl font-semibold">Final results</h2>
+          <div className="mb-3 text-sm text-slate-600">
+            Average turnaround: {Number(result.finalMetrics.averageTurnaround).toFixed(2)} · Average wait: {Number(result.finalMetrics.averageWait).toFixed(2)} · Finished at t={result.finalMetrics.finishedAt}
+          </div>
+          <table className="w-full min-w-[600px] text-sm">
+            <thead className="text-left text-slate-500">
+              <tr><th className="py-2">PID / Ship</th><th>Start</th><th>Finish</th><th>Turnaround</th><th>Wait</th></tr>
+            </thead>
+            <tbody>
+              {result.results.map((item) => (
+                <tr key={item.pid} className="border-t">
+                  <td className="py-2">P{item.pid} · {item.ship}</td>
+                  <td>{item.start < 0 ? "—" : item.start}</td>
+                  <td>{item.finish < 0 ? "Not finished" : item.finish}</td>
+                  <td>{item.finish < 0 ? "—" : item.turnaround}</td>
+                  <td>{item.finish < 0 ? "—" : item.wait}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="rounded-2xl bg-slate-900 p-4 text-green-300 shadow">
+          <h2 className="mb-2 text-xl font-semibold text-white">Banker’s algorithm decisions</h2>
+          {result.bankerEvents.length === 0 ? <p className="text-sm">No resource requests were granted for safety checking.</p> : (
+            <div className="max-h-80 space-y-2 overflow-y-auto font-mono text-sm">
+              {result.bankerEvents.map((event, index) => (
+                <p key={`${event.time}-${event.pid}-${index}`}>
+                  t={event.time} · P{event.pid} requested {event.request.join(" / ")} (B/C/T) · {event.safe ? "SAFE" : "UNSAFE"} · sequence: {event.sequence.map((pid) => `P${pid}`).join(" → ") || "none"}
+                </p>
               ))}
             </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div><h2 className="text-xl font-semibold mb-2">Cranes</h2><div className="space-y-2">{sim.cranes.map((s) => <Slot key={s.num} icon="🏗" label="Crane" slot={s} />)}</div></div>
-            <div><h2 className="text-xl font-semibold mb-2">Trucks</h2><div className="space-y-2">{sim.trucks.map((s) => <Slot key={s.num} icon="🚚" label="Truck" slot={s} />)}</div></div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow p-4 overflow-x-auto">
-            <h2 className="text-xl font-semibold mb-2">Requests (processes)</h2>
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-500">
-                <tr><th>PID</th><th>Ship</th><th>Prio</th><th>Berth left</th><th>Crane left</th><th>Truck left</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {sim.procs.map((p) => (
-                  <tr key={p.pid} className="border-t">
-                    <td className="py-2">P{p.pid}</td>
-                    <td>{shipOf(p.pid)?.name}</td>
-                    <td>{p.priority}</td>
-                    <td>{p.berthremaining} <span className="text-slate-400">({p.berthsize})</span></td>
-                    <td>{p.craneremaining} <span className="text-slate-400">({p.cranesize})</span></td>
-                    <td>{p.truckremaining} <span className="text-slate-400">({p.trucksize})</span></td>
-                    <td><span className={"px-3 py-0.5 rounded-full " + badge[p.status]}>{p.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-xl font-semibold mb-2">Console</h2>
-          <div ref={consoleBox} className="bg-slate-900 text-green-300 font-mono text-sm rounded-2xl p-4 h-[32rem] overflow-y-auto space-y-1">
-            {sim.log.map((line, i) => <p key={i}>{line}</p>)}
-          </div>
-        </div>
-      </div>
+          )}
+        </section>
+      </main>
     </div>
   );
 }
