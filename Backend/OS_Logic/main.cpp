@@ -9,7 +9,7 @@
 
 using namespace std;
 
-//classes
+// classes
 class Ship
 {
 public:
@@ -338,8 +338,10 @@ vector<Process> readfromfile()
             string size;
             row >> id >> size;
             Berth::size parsedSize = Berth::size::Small;
-            if (size == "Large" || size == "large") parsedSize = Berth::size::Large;
-            else if (size == "Medium" || size == "medium") parsedSize = Berth::size::Medium;
+            if (size == "Large" || size == "large")
+                parsedSize = Berth::size::Large;
+            else if (size == "Medium" || size == "medium")
+                parsedSize = Berth::size::Medium;
             berths.push_back({id, parsedSize, 0, 0, FREE});
         }
         else if (keyword == "CRANE")
@@ -366,9 +368,12 @@ vector<Process> readfromfile()
         }
     }
 
-    if (berths.size() > 0) total[0] = berths.size();
-    if (cranes.size() > 0) total[1] = cranes.size();
-    if (trucks.size() > 0) total[2] = trucks.size();
+    if (berths.size() > 0)
+        total[0] = berths.size();
+    if (cranes.size() > 0)
+        total[1] = cranes.size();
+    if (trucks.size() > 0)
+        total[2] = trucks.size();
 
     if (q.empty())
         cout << "ERROR: input.txt contains no PROCESS rows.\n";
@@ -378,7 +383,7 @@ vector<Process> readfromfile()
     return q;
 }
 
-//small helper functions
+// small helper functions
 string shipName(int id)
 {
     int n = ships.size();
@@ -517,7 +522,7 @@ bool requestIsSafe(vector<Process> &processes)
     return false;
 }
 
-//SCHEDULING PART
+// SCHEDULING parT
 
 // true if a should be served before b
 // 1st rule: smaller priority number first (priority scheduling, with aging)
@@ -630,10 +635,12 @@ void printResults(vector<Process> &ps, int t)
             output << ",\"remaining\":" << process.remaining
                    << ",\"allocation\":[" << process.allocation[0] << "," << process.allocation[1] << "," << process.allocation[2]
                    << "],\"need\":[" << process.need[0] << "," << process.need[1] << "," << process.need[2] << "]}";
-            if (p + 1 < (int)frame.processes.size()) output << ",";
+            if (p + 1 < (int)frame.processes.size())
+                output << ",";
         }
         output << "]}";
-        if (i + 1 < (int)outputTimeline.size()) output << ",";
+        if (i + 1 < (int)outputTimeline.size())
+            output << ",";
         output << "\n";
     }
     output << "  ],\n";
@@ -646,11 +653,13 @@ void printResults(vector<Process> &ps, int t)
                << "],\"safe\":" << (event.safe ? "true" : "false") << ",\"sequence\":[";
         for (int s = 0; s < (int)event.sequence.size(); s++)
         {
-            if (s > 0) output << ",";
+            if (s > 0)
+                output << ",";
             output << event.sequence[s];
         }
         output << "]}";
-        if (i + 1 < (int)bankerEvents.size()) output << ",";
+        if (i + 1 < (int)bankerEvents.size())
+            output << ",";
         output << "\n";
     }
     output << "  ],\n";
@@ -874,9 +883,12 @@ void simulate(vector<Process> ps)
         for (int i = 0; i < n; i++)
         {
             string status = "Not arrived";
-            if (ps[i].state == WAITING) status = "Waiting";
-            else if (ps[i].state == RUNNING) status = "Running";
-            else if (ps[i].state == DONE) status = "Done";
+            if (ps[i].state == WAITING)
+                status = "Waiting";
+            else if (ps[i].state == RUNNING)
+                status = "Running";
+            else if (ps[i].state == DONE)
+                status = "Done";
             OutputProcessFrame processFrame;
             processFrame.pid = ps[i].pid;
             processFrame.status = status;
@@ -895,7 +907,7 @@ void simulate(vector<Process> ps)
     printResults(ps, t);
 }
 
-//main
+// main
 int main()
 {
     vector<Process> Port_Queue;
